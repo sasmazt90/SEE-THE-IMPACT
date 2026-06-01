@@ -101,6 +101,10 @@ export default function ContactModal({ isOpen, onClose }: ContactModalProps) {
       const ipResponse = await fetch('/api/get-ip');
       const { ip_hash } = await ipResponse.json();
 
+      if (!supabase) {
+        throw new Error("Supabase is not configured");
+      }
+
       // Insert into Supabase
       const { error: supabaseError } = await supabase
         .from('contact_messages')

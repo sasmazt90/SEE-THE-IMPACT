@@ -1,29 +1,23 @@
-import { createClient } from '@supabase/supabase-js';
+import { createClient } from "@supabase/supabase-js";
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
 
-// Validate Supabase configuration
-if (typeof window !== 'undefined') {
-  if (!supabaseUrl || !supabaseAnonKey) {
-    console.warn('[Supabase] Missing environment variables: NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY');
-  }
-}
+export const supabase =
+  supabaseUrl && supabaseAnonKey
+    ? createClient(supabaseUrl, supabaseAnonKey)
+    : null;
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
-
-// Helper to verify Supabase connection
 export async function verifySupabaseConnection(): Promise<boolean> {
+  if (!supabase) return false;
+
   try {
-    const { error } = await supabase.from('contact_messages').select('id').limit(1);
-    if (error) {
-      console.warn('[Supabase] Connection test failed:', error.message);
-      return false;
-    }
-    return true;
-  } catch (err) {
-    console.warn('[Supabase] Connection error:', err);
+    const { error } = await supabase
+      .from("contact_messages")
+      .select("id")
+      .limit(1);
+    return !error;
+  } catch {
     return false;
   }
 }
-

@@ -20,7 +20,7 @@ import {
   AlternativeBrand,
 } from "@/types/product";
 
-import { getThemeByIndex, getRandomThemeIndex } from "@/lib/themes";
+import { getThemeByIndex, getNextThemeIndex } from "@/lib/themes";
 import { analyzeBrand } from "@/lib/analyzeBrand";
 import {
   analyzeProduct,
@@ -97,8 +97,6 @@ const BRAND_SUGGESTIONS = [
   "Ecover",
 ];
 
-const THEME_ROTATION_INTERVAL = 45000;
-
 export default function Page() {
   const [themeIndex, setThemeIndex] = useState<number | null>(null);
   const [sliderPosition, setSliderPosition] = useState(50);
@@ -141,35 +139,10 @@ export default function Page() {
 
   // refs
   const compareInputRef = useRef<HTMLDivElement>(null);
-  const themeRotationRef = useRef<NodeJS.Timeout | null>(null);
-
-  // INITIAL RANDOM THEME
+  // Start the cinematic sequence with City, then move to Earth and Underwater.
   useEffect(() => {
-    setThemeIndex(getRandomThemeIndex());
+    setThemeIndex(3);
   }, []);
-
-  // AUTO ROTATE THEMES
-  useEffect(() => {
-    const isIdle = !brandData && !productData && backgroundMode === "dynamic";
-
-    if (isIdle) {
-      themeRotationRef.current = setInterval(() => {
-        setThemeIndex(getRandomThemeIndex());
-      }, THEME_ROTATION_INTERVAL);
-    } else {
-      if (themeRotationRef.current) {
-        clearInterval(themeRotationRef.current);
-        themeRotationRef.current = null;
-      }
-    }
-
-    return () => {
-      if (themeRotationRef.current) {
-        clearInterval(themeRotationRef.current);
-        themeRotationRef.current = null;
-      }
-    };
-  }, [brandData, productData, backgroundMode]);
 
   // AUTOCOMPLETE
   useEffect(() => {
@@ -203,7 +176,7 @@ export default function Page() {
 
   // THEME BUTTON RESET
   const handleThemeChange = () => {
-    setThemeIndex(getRandomThemeIndex());
+    setThemeIndex((current) => getNextThemeIndex(current ?? 3));
     setSliderPosition(50);
 
     setBrandData(null);
@@ -417,6 +390,12 @@ export default function Page() {
       ? Math.round((brandData.score + brandData2.score) / 2)
       : (productData?.score ?? brandData?.score ?? 50);
 
+  const handleDynamicVideoEnded = () => {
+    if (backgroundMode !== "dynamic" || brandData || productData) return;
+    setThemeIndex((current) => getNextThemeIndex(current ?? 3));
+    setSliderPosition(50);
+  };
+
   return (
     <div className="relative w-full h-screen overflow-hidden">
       {/* BACKGROUND */}
@@ -425,6 +404,7 @@ export default function Page() {
         sliderPosition={sliderPosition}
         backgroundMode={backgroundMode}
         brandScore={averageScore}
+        onDynamicVideoEnded={handleDynamicVideoEnded}
       />
 
       {showSlider && (

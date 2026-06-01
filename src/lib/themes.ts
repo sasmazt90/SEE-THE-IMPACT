@@ -3,22 +3,17 @@ import { Theme } from "@/types";
 export const EarthTheme: Theme = {
   id: 1,
   name: "Earth",
-  cleanVideo:
-    "https://cdn.pixabay.com/video/2021/08/18/85790-589840517_large.mp4",
-  pollutedVideo:
-    "https://cdn.pixabay.com/video/2020/07/30/45790-445004958_large.mp4",
-  cleanImage:
-    "https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=1920&q=80",
+  cleanVideo: "/videos/Earth-Clean.mp4",
+  pollutedVideo: "/videos/Earth-Polluted.mp4",
+  cleanImage: "/images/Earth-Clean.png",
   pollutedImage: "/images/Earth-Polluted.png",
 };
 
 export const UnderwaterTheme: Theme = {
   id: 2,
   name: "Underwater",
-  cleanVideo:
-    "https://cdn.pixabay.com/video/2020/07/10/43639-438988690_large.mp4",
-  pollutedVideo:
-    "https://cdn.pixabay.com/video/2021/11/05/95361-642865851_large.mp4",
+  cleanVideo: "/videos/Underwater-Clean.mp4",
+  pollutedVideo: "/videos/Underwater-Polluted.mp4",
   cleanImage: "/images/Underwater-Clean.png",
   pollutedImage: "/images/Underwater-Polluted.png",
 };
@@ -26,13 +21,10 @@ export const UnderwaterTheme: Theme = {
 export const CityTheme: Theme = {
   id: 3,
   name: "City",
-  cleanVideo:
-    "https://cdn.pixabay.com/video/2020/05/25/40130-424930032_large.mp4",
-  pollutedVideo:
-    "https://cdn.pixabay.com/video/2019/06/21/24584-343960332_large.mp4",
+  cleanVideo: "/videos/City-Clean.mp4",
+  pollutedVideo: "/videos/City-Polluted.mp4",
   cleanImage: "/images/City-Clean.png",
-  pollutedImage:
-    "https://images.unsplash.com/photo-1611273426858-450d8e3c9fce?w=1920&q=80",
+  pollutedImage: "/images/City-Polluted.png",
 };
 
 export const themes: Theme[] = [EarthTheme, UnderwaterTheme, CityTheme];
@@ -52,6 +44,12 @@ export const getThemeByIndex = (index: number): Theme => {
 
 export const getRandomThemeIndex = (): number => {
   return Math.floor(Math.random() * 3) + 1;
+};
+
+export const getNextThemeIndex = (index: number): number => {
+  if (index === CityTheme.id) return EarthTheme.id;
+  if (index === EarthTheme.id) return UnderwaterTheme.id;
+  return CityTheme.id;
 };
 
 // Alias for getRandomThemeIndex

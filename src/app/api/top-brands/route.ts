@@ -1,14 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
-import { createClient } from "@supabase/supabase-js";
+import { createOptionalSupabaseClient } from "@/lib/serverSupabase";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 // AI’den gelen brand tipi
 type AIBrand = {
@@ -26,25 +23,28 @@ export async function GET(request: NextRequest) {
     // 1) Aktif sponsorları al (max 2 kullanılacak)
     // ----------------------------------------------------
     let sponsoredBrands: any[] = [];
+    const supabase = createOptionalSupabaseClient();
 
-    try {
-      const { data } = await supabase
-        .from("sponsored_brands")
-        .select("*")
-        .eq("active", true)
-        .lte("start_date", today)
-        .gte("end_date", today)
-        .order("score", { ascending: false });
+    if (supabase) {
+      try {
+        const { data } = await supabase
+          .from("sponsored_brands")
+          .select("*")
+          .eq("active", true)
+          .lte("start_date", today)
+          .gte("end_date", today)
+          .order("score", { ascending: false });
 
-      if (data) {
-        sponsoredBrands = data.filter(
-          (sb) =>
-            sb.impressions_cap === 0 ||
-            sb.impressions_count < sb.impressions_cap,
-        );
+        if (data) {
+          sponsoredBrands = data.filter(
+            (sb) =>
+              sb.impressions_cap === 0 ||
+              sb.impressions_count < sb.impressions_cap,
+          );
+        }
+      } catch (err) {
+        console.error("Error fetching sponsored brands:", err);
       }
-    } catch (err) {
-      console.error("Error fetching sponsored brands:", err);
     }
 
     // ----------------------------------------------------
@@ -141,13 +141,15 @@ Return ONLY valid JSON:
     // ----------------------------------------------------
     // 5) Sponsor impression sayısını artır
     // ----------------------------------------------------
-    for (const sb of sponsoredBrands.slice(0, 2)) {
-      await supabase
-        .from("sponsored_brands")
-        .update({
-          impressions_count: sb.impressions_count + 1,
-        })
-        .eq("id", sb.id);
+    if (supabase) {
+      for (const sb of sponsoredBrands.slice(0, 2)) {
+        await supabase
+          .from("sponsored_brands")
+          .update({
+            impressions_count: sb.impressions_count + 1,
+          })
+          .eq("id", sb.id);
+      }
     }
 
     // ----------------------------------------------------

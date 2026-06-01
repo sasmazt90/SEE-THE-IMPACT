@@ -1,14 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
-import { createClient } from "@supabase/supabase-js";
+import { createOptionalSupabaseClient } from "@/lib/serverSupabase";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 // Sector normalization (AI çıktısını senin kullandığın üst kategoriye çevir)
 function normalizeSector(raw?: string | null): string | null {
@@ -91,9 +88,10 @@ export async function POST(request: NextRequest) {
 
     const normalizedSector = normalizeSector(sector);
     let sponsoredProduct = null;
+    const supabase = createOptionalSupabaseClient();
 
     // 1) Sector bazlı sponsor
-    if (normalizedSector) {
+    if (supabase && normalizedSector) {
       const { data } = await supabase
         .from("sponsored_products")
         .select("*")
@@ -104,7 +102,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 2) Hiç bulunamazsa global sponsor
-    if (!sponsoredProduct) {
+    if (supabase && !sponsoredProduct) {
       const { data } = await supabase.from("sponsored_products").select("*");
 
       const best = selectBestSponsor(data || []);
@@ -120,7 +118,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 3) Impression artır
-    if (sponsoredProduct) {
+    if (supabase && sponsoredProduct) {
       await supabase
         .from("sponsored_products")
         .update({

@@ -14,27 +14,60 @@ type OpenFoodFactsProduct = {
   image_url?: string;
 };
 
+const barcodeSources = [
+  {
+    name: "Open Food Facts",
+    baseUrl: "https://world.openfoodfacts.org",
+  },
+  {
+    name: "Open Beauty Facts",
+    baseUrl: "https://world.openbeautyfacts.org",
+  },
+  {
+    name: "Open Products Facts",
+    baseUrl: "https://world.openproductsfacts.org",
+  },
+  {
+    name: "Open Pet Food Facts",
+    baseUrl: "https://world.openpetfoodfacts.org",
+  },
+];
+
 async function fetchProductFromBarcode(
   barcode: string,
-): Promise<OpenFoodFactsProduct | null> {
-  const res = await fetch(
-    `https://world.openfoodfacts.org/api/v0/product/${encodeURIComponent(
-      barcode,
-    )}.json`,
-    { cache: "no-store" },
-  );
+): Promise<{ product: OpenFoodFactsProduct; source: string } | null> {
+  let lastError: unknown = null;
 
-  if (!res.ok) {
-    throw new Error("Unable to verify barcode");
+  for (const source of barcodeSources) {
+    try {
+      const res = await fetch(
+        `${source.baseUrl}/api/v0/product/${encodeURIComponent(barcode)}.json`,
+        { cache: "no-store" },
+      );
+
+      if (!res.ok) {
+        lastError = new Error(`${source.name} returned ${res.status}`);
+        continue;
+      }
+
+      const data = await res.json();
+
+      if (data.status === 1 && data.product) {
+        return {
+          product: data.product as OpenFoodFactsProduct,
+          source: source.name,
+        };
+      }
+    } catch (error) {
+      lastError = error;
+    }
   }
 
-  const data = await res.json();
-
-  if (data.status !== 1 || !data.product) {
-    return null;
+  if (lastError) {
+    console.warn("Barcode lookup warning:", lastError);
   }
 
-  return data.product as OpenFoodFactsProduct;
+  return null;
 }
 
 function buildBarcodeQuery(product: OpenFoodFactsProduct) {
@@ -180,15 +213,16 @@ export async function POST(request: NextRequest) {
     let productImage: string | undefined;
 
     if (barcode) {
-      const product = await fetchProductFromBarcode(String(barcode));
+      const barcodeResult = await fetchProductFromBarcode(String(barcode));
 
-      if (!product) {
+      if (!barcodeResult) {
         return NextResponse.json(
-          { error: "Barcode was not found in OpenFoodFacts" },
+          { error: "Barcode was not found in supported product databases" },
           { status: 404 },
         );
       }
 
+      const { product, source } = barcodeResult;
       const query = buildBarcodeQuery(product);
 
       if (!query) {
@@ -199,7 +233,9 @@ export async function POST(request: NextRequest) {
       }
 
       productImage = product.image_url;
-      productData = await analyzeProductText(query);
+      productData = await analyzeProductText(
+        `${query}\nBarcode source: ${source}`,
+      );
     } else if (imageData) {
       productData = await analyzeProductImage(String(imageData));
 

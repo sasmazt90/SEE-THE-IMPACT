@@ -43,6 +43,15 @@ create table if not exists public.sponsored_products (
   created_at timestamptz not null default now()
 );
 
+grant usage on schema public to anon, authenticated;
+revoke all on public.contact_messages from anon, authenticated;
+revoke all on public.sponsored_brands from anon, authenticated;
+revoke all on public.sponsored_products from anon, authenticated;
+
+grant insert on public.contact_messages to anon;
+grant select, update on public.sponsored_brands to anon;
+grant select, update on public.sponsored_products to anon;
+
 alter table public.contact_messages enable row level security;
 alter table public.sponsored_brands enable row level security;
 alter table public.sponsored_products enable row level security;

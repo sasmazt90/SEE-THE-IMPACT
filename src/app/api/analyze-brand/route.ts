@@ -68,15 +68,30 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const score = Number(brandData.score);
+
+    if (
+      !Number.isFinite(score) ||
+      !Array.isArray(brandData.positives) ||
+      !Array.isArray(brandData.negatives) ||
+      !Array.isArray(brandData.sustainabilityActions) ||
+      typeof brandData.industryContext !== 'string'
+    ) {
+      return NextResponse.json(
+        { error: 'Brand analysis returned incomplete data' },
+        { status: 502 }
+      );
+    }
+
     // Validate and sanitize the response
     const sanitizedData = {
-      score: Math.max(0, Math.min(100, Number(brandData.score) || 50)),
-      sector: brandData.sector || 'General',
-      category: brandData.category || 'General',
+      score: Math.max(0, Math.min(100, score)),
+      sector: typeof brandData.sector === 'string' ? brandData.sector : undefined,
+      category: typeof brandData.category === 'string' ? brandData.category : undefined,
       positives: Array.isArray(brandData.positives) ? brandData.positives.slice(0, 5) : [],
       negatives: Array.isArray(brandData.negatives) ? brandData.negatives.slice(0, 5) : [],
       sustainabilityActions: Array.isArray(brandData.sustainabilityActions) ? brandData.sustainabilityActions.slice(0, 5) : [],
-      industryContext: typeof brandData.industryContext === 'string' ? brandData.industryContext : '',
+      industryContext: brandData.industryContext,
     };
 
     return NextResponse.json(sanitizedData);

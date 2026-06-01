@@ -40,7 +40,7 @@ export default function QRScannerModal({
   const [error, setError] = useState<string | null>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
 
-  // ZXing reader ref (fallback için)
+  // ZXing reader ref for browsers without native barcode detection.
   const zxingReaderRef = useRef<any>(null);
   const [shouldUseZXing, setShouldUseZXing] = useState(false);
   
@@ -169,7 +169,7 @@ export default function QRScannerModal({
   // 1) BarcodeDetector yolu (destekleyen, iOS olmayan tarayıcılarda)
   useEffect(() => {
     if (!isOpen || !videoRef.current || isLoading || error) return;
-    if (shouldUseZXing) return; // Bu durumda ZXing fallback çalışacak
+    if (shouldUseZXing) return;
 
     let animationId: number;
     let detecting = false;
@@ -222,7 +222,7 @@ export default function QRScannerModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, isLoading, error, onScan, onClose, shouldUseZXing]);
 
-  // 2) ZXing fallback – özellikle iOS için
+  // 2) ZXing scanner path, especially for iOS.
   useEffect(() => {
     if (!isOpen || !videoRef.current || isLoading || error) return;
     if (!shouldUseZXing) return;
@@ -292,7 +292,7 @@ export default function QRScannerModal({
         );
       } catch (e) {
         // ZXing tamamen patlasa bile uygulama çökmesin, sadece console’a loglansın
-        console.error("ZXing fallback error:", e);
+        console.error("ZXing scanner error:", e);
       }
     };
 

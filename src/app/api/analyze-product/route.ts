@@ -5,57 +5,111 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-// Fetch product name from OpenFoodFacts using barcode
-async function fetchProductNameFromBarcode(
+type OpenFoodFactsProduct = {
+  product_name?: string;
+  generic_name?: string;
+  brands?: string;
+  categories?: string;
+  ingredients_text?: string;
+  image_url?: string;
+};
+
+async function fetchProductFromBarcode(
   barcode: string,
-): Promise<string | null> {
-  try {
-    const res = await fetch(
-      `https://world.openfoodfacts.org/api/v0/product/${barcode}.json`,
-    );
+): Promise<OpenFoodFactsProduct | null> {
+  const res = await fetch(
+    `https://world.openfoodfacts.org/api/v0/product/${encodeURIComponent(
+      barcode,
+    )}.json`,
+    { cache: "no-store" },
+  );
 
-    const data = await res.json();
+  if (!res.ok) {
+    throw new Error("Unable to verify barcode");
+  }
 
-    if (data.status === 1) {
-      return data.product.product_name || data.product.generic_name || null;
-    }
-    return null;
-  } catch (err) {
-    console.error("OpenFoodFacts error:", err);
+  const data = await res.json();
+
+  if (data.status !== 1 || !data.product) {
     return null;
   }
+
+  return data.product as OpenFoodFactsProduct;
 }
 
-export async function POST(request: NextRequest) {
-  try {
-    const { productName, barcode } = await request.json();
+function buildBarcodeQuery(product: OpenFoodFactsProduct) {
+  const productName = product.product_name || product.generic_name;
 
-    // STEP 1 — Resolve final query name
-    let query = productName;
+  if (!productName) {
+    return null;
+  }
 
-    if (barcode) {
-      const foundName = await fetchProductNameFromBarcode(barcode);
-      if (foundName) {
-        query = foundName;
-      } else {
-        // fallback: ask GPT to guess product name
-        query = `product with barcode: ${barcode}`;
-      }
-    }
+  return [
+    `Product: ${productName}`,
+    product.brands ? `Brand: ${product.brands}` : null,
+    product.categories ? `Categories: ${product.categories}` : null,
+    product.ingredients_text ? `Ingredients: ${product.ingredients_text}` : null,
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
 
-    if (!query || typeof query !== "string") {
-      return NextResponse.json(
-        { error: "Product name or barcode is required" },
-        { status: 400 },
-      );
-    }
+function parseOpenAIJson(content: string) {
+  const cleaned = content
+    .replace(/```json/g, "")
+    .replace(/```/g, "")
+    .trim();
 
-    // STEP 2 — Sustainability analysis via GPT
-    const systemPrompt = `
-You are a product sustainability analyst. Analyze products for environmental impact.
+  return JSON.parse(cleaned);
+}
 
-If the input looks like a BARCODE or UNKNOWN PRODUCT, infer the most likely product category and brand based on common global products. Never leave product_name empty.
+function validateProductData(productData: any) {
+  const score = Number(productData?.score);
 
+  if (
+    !productData ||
+    typeof productData.product_name !== "string" ||
+    !productData.product_name.trim() ||
+    typeof productData.brand !== "string" ||
+    !productData.brand.trim() ||
+    !Number.isFinite(score) ||
+    !Array.isArray(productData.positives) ||
+    !Array.isArray(productData.negatives) ||
+    typeof productData.summary !== "string"
+  ) {
+    throw new Error("Product analysis returned incomplete data");
+  }
+
+  return {
+    product_name: productData.product_name.trim(),
+    brand: productData.brand.trim(),
+    product_image:
+      typeof productData.product_image === "string"
+        ? productData.product_image
+        : undefined,
+    sector:
+      typeof productData.sector === "string" ? productData.sector : undefined,
+    category:
+      typeof productData.category === "string"
+        ? productData.category
+        : undefined,
+    ingredients: Array.isArray(productData.ingredients)
+      ? productData.ingredients
+      : [],
+    score: Math.max(0, Math.min(100, score)),
+    positives: productData.positives.slice(0, 3),
+    negatives: productData.negatives.slice(0, 3),
+    summary: productData.summary,
+    referencesPositive: Array.isArray(productData.referencesPositive)
+      ? productData.referencesPositive
+      : [],
+    referencesNegative: Array.isArray(productData.referencesNegative)
+      ? productData.referencesNegative
+      : [],
+  };
+}
+
+const productAnalysisSchema = `
 Return ONLY valid JSON (NO markdown):
 {
   "product_name": "",
@@ -72,62 +126,103 @@ Return ONLY valid JSON (NO markdown):
 }
 `;
 
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: `Analyze this product: ${query}` },
-      ],
-      temperature: 0.4,
-      max_tokens: 1500,
-    });
+async function analyzeProductText(query: string) {
+  const completion = await openai.chat.completions.create({
+    model: "gpt-4o-mini",
+    messages: [
+      {
+        role: "system",
+        content: `You are a product sustainability analyst. Analyze only the product provided by the user. Do not guess a different product if the input is incomplete. ${productAnalysisSchema}`,
+      },
+      { role: "user", content: `Analyze this product:\n${query}` },
+    ],
+    temperature: 0.3,
+    max_tokens: 1500,
+  });
 
-    const responseText = completion.choices[0]?.message?.content || "";
+  return parseOpenAIJson(completion.choices[0]?.message?.content || "");
+}
 
-    let productData;
-    try {
-      const cleaned = responseText
-        .replace(/```json/g, "")
-        .replace(/```/g, "")
-        .trim();
+async function analyzeProductImage(imageData: string) {
+  const completion = await openai.chat.completions.create({
+    model: "gpt-4o-mini",
+    messages: [
+      {
+        role: "system",
+        content: `You identify the exact visible product from the image and analyze its sustainability. If the product or brand cannot be identified, return {"error":"Product could not be identified from image"}. Do not invent missing product details. ${productAnalysisSchema}`,
+      },
+      {
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: "Identify and analyze the product in this image.",
+          },
+          {
+            type: "image_url",
+            image_url: { url: imageData },
+          },
+        ],
+      },
+    ],
+    temperature: 0.2,
+    max_tokens: 1500,
+  });
 
-      productData = JSON.parse(cleaned);
-    } catch (e) {
-      console.error("JSON parse error:", responseText);
+  return parseOpenAIJson(completion.choices[0]?.message?.content || "");
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    const { productName, barcode, imageData } = await request.json();
+
+    let productData: any;
+    let productImage: string | undefined;
+
+    if (barcode) {
+      const product = await fetchProductFromBarcode(String(barcode));
+
+      if (!product) {
+        return NextResponse.json(
+          { error: "Barcode was not found in OpenFoodFacts" },
+          { status: 404 },
+        );
+      }
+
+      const query = buildBarcodeQuery(product);
+
+      if (!query) {
+        return NextResponse.json(
+          { error: "Barcode record does not include a product name" },
+          { status: 422 },
+        );
+      }
+
+      productImage = product.image_url;
+      productData = await analyzeProductText(query);
+    } else if (imageData) {
+      productData = await analyzeProductImage(String(imageData));
+
+      if (productData?.error) {
+        return NextResponse.json({ error: productData.error }, { status: 422 });
+      }
+    } else if (productName && typeof productName === "string") {
+      productData = await analyzeProductText(productName);
+    } else {
       return NextResponse.json(
-        { error: "Failed to parse AI response" },
-        { status: 500 },
+        { error: "Product name, barcode, or image is required" },
+        { status: 400 },
       );
     }
 
-    // Final sanitized object
-    const sanitized = {
-      product_name: productData.product_name || query,
-      brand: productData.brand || "Unknown Brand",
-      sector: productData.sector || "General",
-      category: productData.category || "General",
-      ingredients: Array.isArray(productData.ingredients)
-        ? productData.ingredients
-        : [],
-      score: Math.max(0, Math.min(100, Number(productData.score) || 50)),
-      positives: Array.isArray(productData.positives)
-        ? productData.positives.slice(0, 3)
-        : [],
-      negatives: Array.isArray(productData.negatives)
-        ? productData.negatives.slice(0, 3)
-        : [],
-      summary: productData.summary || "",
-      referencesPositive: Array.isArray(productData.referencesPositive)
-        ? productData.referencesPositive
-        : [],
-      referencesNegative: Array.isArray(productData.referencesNegative)
-        ? productData.referencesNegative
-        : [],
-    };
+    const sanitized = validateProductData(productData);
 
-    return NextResponse.json(sanitized);
+    return NextResponse.json({
+      ...sanitized,
+      product_image: sanitized.product_image || productImage,
+    });
   } catch (error) {
-    console.error("Analysis error:", error);
+    console.error("Product analysis error:", error);
     return NextResponse.json(
       { error: "Failed to analyze product" },
       { status: 500 },

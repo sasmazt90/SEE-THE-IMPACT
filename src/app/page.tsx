@@ -24,9 +24,12 @@ import { getThemeByIndex, getNextThemeIndex } from "@/lib/themes";
 import { analyzeBrand } from "@/lib/analyzeBrand";
 import {
   analyzeProduct,
+  fileToDataUrl,
   getAlternatives,
   getBrandAlternatives,
+  validateProductImageFile,
 } from "@/lib/analyzeProduct";
+import { useToast } from "@/components/ui/use-toast";
 
 import { Search, Loader2, X } from "lucide-react";
 
@@ -98,6 +101,7 @@ const BRAND_SUGGESTIONS = [
 ];
 
 export default function Page() {
+  const { toast } = useToast();
   const [themeIndex, setThemeIndex] = useState<number | null>(null);
   const [sliderPosition, setSliderPosition] = useState(50);
 
@@ -214,6 +218,12 @@ export default function Page() {
       setBrandAlternatives(alts);
     } catch (error) {
       console.error("Error analyzing brand:", error);
+      toast({
+        title: "Brand analysis failed",
+        description:
+          error instanceof Error ? error.message : "Please try again.",
+        variant: "destructive",
+      });
     } finally {
       setIsLoading(false);
       setIsLoadingBrandAlternatives(false);
@@ -224,6 +234,7 @@ export default function Page() {
   const handleProductAnalysis = async (
     productName: string,
     barcode?: string,
+    imageData?: string,
   ) => {
     setIsLoading(true);
     setProductData(null);
@@ -235,7 +246,7 @@ export default function Page() {
     setBrandAlternatives([]);
 
     try {
-      const data = await analyzeProduct(productName, barcode);
+      const data = await analyzeProduct(productName, barcode, imageData);
       setProductData(data);
 
       setBackgroundMode("brand");
@@ -251,6 +262,12 @@ export default function Page() {
       setAlternatives(alts);
     } catch (error) {
       console.error("Error analyzing product:", error);
+      toast({
+        title: "Product analysis failed",
+        description:
+          error instanceof Error ? error.message : "Please try again.",
+        variant: "destructive",
+      });
     } finally {
       setIsLoading(false);
       setIsLoadingAlternatives(false);
@@ -261,6 +278,22 @@ export default function Page() {
   const handleQRScan = (code: string) => {
     setShowQRScanner(false);
     handleProductAnalysis(code, code);
+  };
+
+  const handleProductImageUpload = async (file: File) => {
+    try {
+      validateProductImageFile(file);
+      const imageData = await fileToDataUrl(file);
+      await handleProductAnalysis(file.name, undefined, imageData);
+    } catch (error) {
+      console.error("Error reading product image:", error);
+      toast({
+        title: "Image upload failed",
+        description:
+          error instanceof Error ? error.message : "Please try another image.",
+        variant: "destructive",
+      });
+    }
   };
 
   // SELECT ALTERNATIVE PRODUCT
@@ -303,6 +336,12 @@ export default function Page() {
       setCompareBrandInput("");
     } catch (error) {
       console.error("Error analyzing brand:", error);
+      toast({
+        title: "Brand comparison failed",
+        description:
+          error instanceof Error ? error.message : "Please try again.",
+        variant: "destructive",
+      });
     } finally {
       setIsLoading2(false);
     }
@@ -491,6 +530,7 @@ export default function Page() {
         isLoading={isLoading}
         compareMode={compareMode}
         hidden={!showSearchBar}
+        onImageUpload={handleProductImageUpload}
         onQRScan={() => setShowQRScanner(true)}
       />
 

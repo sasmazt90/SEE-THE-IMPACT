@@ -179,7 +179,7 @@ Also ensure none of the returned alternatives is the same brand as: ${brandName}
 
     const alternatives: any[] = [];
 
-    if (sponsoredBrand) {
+    if (sponsoredBrand && Number.isFinite(Number(sponsoredBrand.score))) {
       const hasHigherScore =
         brandScore && sponsoredBrand.score && sponsoredBrand.score > brandScore;
 
@@ -187,7 +187,7 @@ Also ensure none of the returned alternatives is the same brand as: ${brandName}
         brand_name: sponsoredBrand.brand_name,
         explanation: "Sponsored eco-friendly alternative",
         logo_url: sponsoredBrand.logo_url,
-        score: sponsoredBrand.score || 85,
+        score: Number(sponsoredBrand.score),
         isSponsored: true,
         sponsoredId: sponsoredBrand.id,
         url: sponsoredBrand.url,
@@ -197,6 +197,16 @@ Also ensure none of the returned alternatives is the same brand as: ${brandName}
 
     if (Array.isArray(aiData.alternatives)) {
       aiData.alternatives.slice(0, aiCount).forEach((alt: any) => {
+        const score = Number(alt.score);
+
+        if (
+          typeof alt.brand_name !== "string" ||
+          typeof alt.explanation !== "string" ||
+          !Number.isFinite(score)
+        ) {
+          return;
+        }
+
         if (alt.brand_name.toLowerCase() === brandName.toLowerCase()) {
           return; // skip same brand
         }
@@ -204,7 +214,7 @@ Also ensure none of the returned alternatives is the same brand as: ${brandName}
         alternatives.push({
           brand_name: alt.brand_name,
           explanation: alt.explanation,
-          score: Math.max(0, Math.min(100, Number(alt.score) || 70)),
+          score: Math.max(0, Math.min(100, score)),
           isSponsored: false,
         });
       });

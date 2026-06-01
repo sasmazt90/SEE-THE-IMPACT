@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Search, Loader2, QrCode } from "lucide-react";
+import { ImageUp, Search, Loader2, QrCode } from "lucide-react";
 
 // Sample brand names for autocomplete
 const BRAND_SUGGESTIONS = [
@@ -76,6 +76,7 @@ interface BrandSearchProps {
   compareMode?: boolean;
   hidden?: boolean;
   onQRScan?: () => void;
+  onImageUpload?: (file: File) => Promise<void>;
 }
 
 export default function BrandSearch({
@@ -84,12 +85,14 @@ export default function BrandSearch({
   compareMode = false,
   hidden = false,
   onQRScan,
+  onImageUpload,
 }: BrandSearchProps) {
   const [brandName, setBrandName] = useState("");
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [filteredSuggestions, setFilteredSuggestions] = useState<string[]>([]);
 
   const inputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // ❗ containerRef ARTIK DIV içindir, FORM için değil
   const containerRef = useRef<HTMLDivElement>(null);
@@ -135,6 +138,16 @@ export default function BrandSearch({
     setShowSuggestions(false);
     await onAnalyze(suggestion);
     setBrandName("");
+  };
+
+  const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+
+    if (!file || !onImageUpload || isLoading) return;
+
+    setShowSuggestions(false);
+    await onImageUpload(file);
   };
 
   return (
@@ -199,6 +212,28 @@ export default function BrandSearch({
                   <span>Analyze</span>
                 )}
               </button>
+
+              {onImageUpload && (
+                <>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    className="hidden"
+                    onChange={handleImageChange}
+                    disabled={isLoading}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isLoading}
+                    className="p-2 sm:p-2.5 bg-white/10 hover:bg-white/20 disabled:bg-gray-600 rounded-full transition-all duration-300 disabled:cursor-not-allowed disabled:opacity-50 flex-shrink-0"
+                    title="Upload product image"
+                  >
+                    <ImageUp className="w-5 h-5 text-[#E4FF3A]" />
+                  </button>
+                </>
+              )}
 
               {/* QR Scanner Button */}
               {onQRScan && (
